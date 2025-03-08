@@ -11,9 +11,10 @@ import sounddevice as sd
 import speech_recognition as sr
 import google.generativeai as genai
 
+
 # Constants
 fs = 44100  # Sample rate
-recording_length = 10
+recording_length = 20
 
 # Initialize session state
 if "file_index" not in st.session_state:
@@ -23,10 +24,22 @@ if "file_list" not in st.session_state:
 if "folder_path" not in st.session_state:
     st.session_state.folder_path = ""
 if "prompt" not in st.session_state:
-    st.session_state.prompt = "Use the below transcript to generate a short constructive feedback for a student submission. Here is the transcript: "
-    
+    st.session_state.prompt = "Using the transcript below, generate a concise and constructive feedback for the student submission. Focus solely on the feedback, avoiding any metadata or additional commentary. Ensure the tone is formal, objective, and humanized, with no emotional language. Below is the transcript: "
+if "reset_widgets" not in st.session_state:
+    st.session_state.reset_widgets = False
+
 # Expand Streamlit layout to full width
 st.set_page_config(layout="wide")
+
+
+# Reset widget values
+def reset_widget_values():
+    if st.session_state.reset_widgets:
+        st.session_state.feedback_text = ""
+        st.session_state.code_mark = ""
+        st.session_state.text_mark = ""
+        st.session_state.total_mark = ""
+        st.session_state.reset_widgets = False
 
 
 # Folder picker
@@ -44,6 +57,7 @@ def load_files(folder):
     if os.path.isdir(folder):
         st.session_state.file_list = sorted([f for f in os.listdir(folder) if f.endswith((".html", ".docx", ".pdf"))])
         st.session_state.file_index = 0
+        st.session_state.reset_widgets = True
 
 
 # Recording and Transcribing
@@ -80,7 +94,8 @@ def record_and_transcribe():
 
     try:
         text = recognizer.recognize_google(audio)
-        st.session_state.feedback_text += text + "\n\n"
+        current_text = st.session_state.get("feedback_text", "")
+        st.session_state.feedback_text = current_text + text + "\n\n"
     except sr.UnknownValueError:
         st.error("⚠️ Could not understand the audio.")
     except sr.RequestError:
@@ -109,7 +124,7 @@ def save_feedback():
     json_path = file_path.replace(os.path.splitext(file_path)[1], ".json")
     with open(json_path, "w") as f:
         json.dump(feedback_data, f, indent=4)
-             
+
 
 # Display content
 def display_content():
@@ -118,15 +133,17 @@ def display_content():
 
     st.write(f"**{st.session_state.file_index + 1} / {len(st.session_state.file_list)}** | {file_path}")
 
+    json_path = file_path.replace(os.path.splitext(file_path)[1], ".json")
+    if os.path.exists(json_path):
+        st.write(json.load(open(json_path)))
+
     if file_ext == ".html":
         with open(file_path, "r", encoding="utf-8") as f:
             html_content = f.read()
         st.components.v1.html(f'<div style="max-width:1200px; margin:auto;">{html_content}</div>', height=600, scrolling=True)
-
     elif file_ext == ".docx":
         with open(file_path, "rb") as f:
             st.download_button("📥 Download DOCX", f, file_name=os.path.basename(file_path), mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document")
-
     elif file_ext == ".pdf":
         with open(file_path, "rb") as f:
             st.download_button("📥 Download PDF", f, file_name=os.path.basename(file_path), mime="application/pdf")
@@ -135,6 +152,10 @@ def display_content():
 
 # UI Layout
 st.title("🎙️ Marking Assistant")
+
+# Reset widgets at the start of each run if needed
+reset_widget_values()
+
 col1, col2 = st.columns([1, 2])
 
 with col1:
@@ -166,12 +187,12 @@ with col1:
             save_feedback()
     with col2222:
         if st.button("⏮️ Previous") and st.session_state.file_index > 0:
-            save_feedback()
             st.session_state.file_index -= 1
+            st.session_state.reset_widgets = True
     with col3333:
         if st.button("⏭️ Next") and st.session_state.file_index < len(st.session_state.file_list) - 1:
-            save_feedback()
             st.session_state.file_index += 1
+            st.session_state.reset_widgets = True 
             
 with col2:
     if st.session_state.file_list:
